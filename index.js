@@ -1,4 +1,4 @@
-const Readable = require('stream').Readable,
+const Readable = require('readable-stream').Readable,
   geohash = require('ngeohash'),
   pip = require('point-in-polygon'),
   turfHelper = require('@turf/helpers'),
