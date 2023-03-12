@@ -28,7 +28,7 @@
     "async": "~2.6.4",
     "ngeohash": "0.6.3",
     "point-in-polygon": "1.1.0",
-    "readable-stream": "^3.6.2",
+    "stream-browserify": "^3.0.0",
     "through2": "~4.0.2",
     "util": "^0.12.5"
   },
