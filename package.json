@@ -13,6 +13,11 @@
     "email": "derrick@dpelletier.com",
     "url": "http://dpelletier.com"
   },
+  "scripts": {
+    "standard": "node examples/standard.js",
+    "streaming": "node examples/streaming.js",
+    "test": "node test/test.js"
+  },
   "license": "MIT",
   "readmeFilename": "README.md",
   "dependencies": {
@@ -25,7 +30,8 @@
     "turf-extent": "1.0.4",
     "turf-featurecollection": "1.0.1",
     "turf-intersect": "1.0.2",
-    "turf-polygon": "1.0.3"
+    "turf-polygon": "1.0.3",
+    "util": "^0.12.5"
   },
   "devDependencies": {
     "joe": "~1.4.0",
