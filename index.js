@@ -1,19 +1,20 @@
-var Readable = require('stream').Readable,
+const Readable = require('stream').Readable,
   geohash = require('ngeohash'),
   pip = require('point-in-polygon'),
-  turfExtent = require('turf-extent'),
-  turfFeaturecollection = require('turf-featurecollection'),
-  turfPolygon = require('turf-polygon'),
-  turfIntersect = require('turf-intersect'),
-  turf = {
-  	extent: turfExtent,
-  	featurecollection: turfFeaturecollection,
-  	polygon: turfPolygon,
-  	intersect: turfIntersect
-  },
+  turfHelper = require('@turf/helpers'),
   through2 = require('through2'),
   async = require('async'),
-  geojsonArea = require('geojson-area');
+  geojsonArea = require('@mapbox/geojson-area');
+
+const turfIntersect = require('@turf/intersect')
+const turfBbox = require('@turf/bbox')
+
+const turf = {
+  extent: turfBbox.default,
+  featurecollection: turfHelper.featureCollection,
+  polygon: turfHelper.polygon,
+  intersect: turfIntersect.default
+}
 
 /**
  * utilizing point-in-poly but providing support for geojson polys and holes.
@@ -21,12 +22,12 @@ var Readable = require('stream').Readable,
 var inside = function (point, geopoly) {
   var inside = 0;
 
-  if(geopoly.type !== "Polygon" && geopoly.type !== "MultiPolygon") return false;
+  if (geopoly.type !== "Polygon" && geopoly.type !== "MultiPolygon") return false;
 
   var shape = geopoly.type === 'Polygon' ? [geopoly.coordinates] : geopoly.coordinates;
   shape.forEach(function (polygon) {
     polygon.forEach(function (ring) {
-      if(pip([point.longitude, point.latitude], ring)) inside++;
+      if (pip([point.longitude, point.latitude], ring)) inside++;
     });
   });
   return inside % 2;
@@ -61,15 +62,15 @@ var Hasher = function (options) {
     return turf.polygon(el);
   });
   if (this.integerMode) {
-  	this.geohashEncode = geohash.encode_int;
-  	this.geohashDecode = geohash.decode_int;
-  	this.geohashDecodeBbox = geohash.decode_bbox_int;
-  	this.geohashNeighbor = geohash.neighbor_int;
+    this.geohashEncode = geohash.encode_int;
+    this.geohashDecode = geohash.decode_int;
+    this.geohashDecodeBbox = geohash.decode_bbox_int;
+    this.geohashNeighbor = geohash.neighbor_int;
   } else {
-  	this.geohashEncode = geohash.encode;
-  	this.geohashDecode = geohash.decode;
-  	this.geohashDecodeBbox = geohash.decode_bbox;
-  	this.geohashNeighbor = geohash.neighbor;
+    this.geohashEncode = geohash.encode;
+    this.geohashDecode = geohash.decode;
+    this.geohashDecodeBbox = geohash.decode_bbox;
+    this.geohashNeighbor = geohash.neighbor;
   }
 
   Readable.call(this, {
@@ -96,8 +97,8 @@ Hasher.prototype._read = function () {
       callback(err);
     });
   }, function () {
-    if(!self.geojson.length && !hashes.length) return self.push(null);
-    if(self.rowMode) return self.push(hashes);
+    if (!self.geojson.length && !hashes.length) return self.push(null);
+    if (self.rowMode) return self.push(hashes);
     hashes.forEach(function (h) {
       self.push(h);
     });
@@ -113,11 +114,11 @@ Hasher.prototype._read = function () {
  */
 Hasher.prototype.getNextRow = function (done) {
   var self = this,
-    currentGeojson = self.geojson[self.geojson.length-1];
+    currentGeojson = self.geojson[self.geojson.length - 1];
 
   var makeRow = function () {
 
-    if(!self.rowHash) {
+    if (!self.rowHash) {
       self.rowHash = self.geohashEncode(self.bounding[2], self.bounding[1], self.precision);
     }
 
@@ -128,24 +129,24 @@ Hasher.prototype.getNextRow = function (done) {
 
     var preparePoly = function (next) {
       // Detect poly length
-      if(self.hashMode !== 'extent' && currentGeojson.geometry.coordinates[0].length >= self.splitAt) {
+      if (self.hashMode !== 'extent' && currentGeojson.geometry.coordinates[0].length >= self.splitAt) {
 
         var clipper = turf.polygon([[
-          [ self.bounding[1] - rowBuffer, rowBox[2] + rowBuffer], // nw
-          [ self.bounding[3] + rowBuffer, rowBox[2] + rowBuffer], // ne
-          [ self.bounding[3] + rowBuffer, rowBox[0] - rowBuffer], // se
-          [ self.bounding[1] - rowBuffer, rowBox[0] - rowBuffer], //sw
-          [ self.bounding[1] - rowBuffer, rowBox[2] + rowBuffer] //nw
+          [self.bounding[1] - rowBuffer, rowBox[2] + rowBuffer], // nw
+          [self.bounding[3] + rowBuffer, rowBox[2] + rowBuffer], // ne
+          [self.bounding[3] + rowBuffer, rowBox[0] - rowBuffer], // se
+          [self.bounding[1] - rowBuffer, rowBox[0] - rowBuffer], //sw
+          [self.bounding[1] - rowBuffer, rowBox[2] + rowBuffer] //nw
         ]]);
 
         var intersection = turf.intersect(turf.featurecollection([clipper]), turf.featurecollection([currentGeojson]));
-        if(intersection && intersection.features.length) {
+        if (intersection && intersection.features.length) {
           // Calculate the row bounding and column hash based on the intersection
-          var intersectionFeature = { type: 'Feature', geometry: intersection.features[0], properties: {} };
+          var intersectionFeature = {type: 'Feature', geometry: intersection.features[0], properties: {}};
           var extent = turf.extent(turf.featurecollection([intersectionFeature]));
           // extent = [minX, minY, maxX, maxY], remap to match geohash lib
           self.rowBounding = [extent[1], extent[0], extent[3], extent[2]];
-          var midY = self.rowBounding[0]+(self.rowBounding[2]-self.rowBounding[0])/2;
+          var midY = self.rowBounding[0] + (self.rowBounding[2] - self.rowBounding[0]) / 2;
           columnHash = self.geohashEncode(midY, self.rowBounding[1], self.precision);
           next(null, intersection.features[0]);
         } else {
@@ -153,7 +154,7 @@ Hasher.prototype.getNextRow = function (done) {
         }
 
       } else {
-          next(null, currentGeojson.geometry);
+        next(null, currentGeojson.geometry);
       }
     };
 
@@ -162,7 +163,7 @@ Hasher.prototype.getNextRow = function (done) {
       var columnCenter = self.geohashDecode(columnHash, self.precision),
         westerly = self.geohashNeighbor(self.geohashEncode(columnCenter.latitude, self.rowBounding[3], self.precision), [0, 1], self.precision);
       while (columnHash !== westerly) {
-        if(self.hashMode === 'inside' && inside(columnCenter, prepared)) {
+        if (self.hashMode === 'inside' && inside(columnCenter, prepared)) {
           rowHashes.push(columnHash);
         } else if (self.hashMode === 'intersect' || self.hashMode === 'extent') {
           rowHashes.push(columnHash);
@@ -175,7 +176,7 @@ Hasher.prototype.getNextRow = function (done) {
 
       // Check if the current rowHash was already the most southerly hash on the map.
       // Also check if we are at or past the bottom of the bounding box.
-      if(southNeighbour === self.rowHash || rowBox[0] <= self.bounding[0]) {
+      if (southNeighbour === self.rowHash || rowBox[0] <= self.bounding[0]) {
         self.geojson.pop();
         self.rowHash = null;
         self.bounding = null;
@@ -184,7 +185,7 @@ Hasher.prototype.getNextRow = function (done) {
         self.rowHash = southNeighbour;
       }
 
-      if(self.hashMode === 'inside' || self.hashMode === 'extent' || !rowHashes.length) {
+      if (self.hashMode === 'inside' || self.hashMode === 'extent' || !rowHashes.length) {
         done(null, rowHashes);
       } else if (self.hashMode === 'intersect') {
 
@@ -192,18 +193,18 @@ Hasher.prototype.getNextRow = function (done) {
         async.filter(rowHashes, function (h, cb) {
           var bb = self.geohashDecodeBbox(h, self.precision);
           bb = turf.polygon([[
-                [bb[1], bb[2]],
-                [bb[3], bb[2]],
-                [bb[3], bb[0]],
-                [bb[1], bb[0]],
-                [bb[1], bb[2]]
-              ]]);
+            [bb[1], bb[2]],
+            [bb[3], bb[2]],
+            [bb[3], bb[0]],
+            [bb[1], bb[0]],
+            [bb[1], bb[2]]
+          ]]);
 
-          if(!baseArea) baseArea = geojsonArea.geometry(bb.geometry);
+          if (!baseArea) baseArea = geojsonArea.geometry(bb.geometry);
 
           var intersected = turf.intersect(turf.featurecollection([turf.polygon(prepared.coordinates)]), turf.featurecollection([bb]));
-          var keepIntersection = !self.threshold ? true : false;
-          if(self.threshold && intersected.features.length && (intersected.features[0].type === 'Polygon' || intersected.features[0].type === 'MultiPolygon')) {
+          var keepIntersection = !self.threshold;
+          if (self.threshold && intersected.features.length && (intersected.features[0].type === 'Polygon' || intersected.features[0].type === 'MultiPolygon')) {
             var intersectedArea = geojsonArea.geometry(intersected.features[0]);
             keepIntersection = baseArea && intersectedArea / baseArea >= self.threshold;
           }
@@ -216,7 +217,7 @@ Hasher.prototype.getNextRow = function (done) {
     });
   };
 
-  if(!this.bounding) {
+  if (!this.bounding) {
     var extent = turf.extent(turf.featurecollection([currentGeojson]));
     // extent = [minX, minY, maxX, maxY], remap to match geohash lib
     self.bounding = [extent[1], extent[0], extent[3], extent[2]];
@@ -237,8 +238,8 @@ var streamer = function (options) {
   return new Hasher({
     geojson: options.coords,
     precision: options.precision,
-    rowMode: options.rowMode ? true : false,
-    integerMode: options.integerMode ? true : false,
+    rowMode: !!options.rowMode,
+    integerMode: !!options.integerMode,
     hashMode: options.hashMode,
     threshold: options.threshold
   });
